@@ -13,6 +13,10 @@ const app = express()
 // =======================
 // LOGS DE DIAGNÓSTICO (CRÍTICO)
 // =======================
+console.log("📤 Payload MP:", {
+  email: user.email,
+  frontend: process.env.FRONTEND_URL
+})
 console.log("🚀 Server.js iniciado com sucesso");
 console.log("ENV:", {
   NODE_ENV: process.env.NODE_ENV,
