@@ -182,16 +182,27 @@ app.post("/assinatura", checkToken, async (req, res) => {
 
     const payload = {
       reason: "Assinatura Mensal - Plataforma QuimITA",
-      payer_email: user.email,
+    
+      payer: {
+        email: user.email
+      },
+    
       auto_recurring: {
         frequency: 1,
         frequency_type: "months",
         transaction_amount: 10,
         currency_id: "BRL"
       },
-      back_url: `${process.env.FRONTEND_URL}/sucesso`,
+    
+      back_urls: {
+        success: `${process.env.FRONTEND_URL}/sucesso`,
+        failure: `${process.env.FRONTEND_URL}/erro`,
+        pending: `${process.env.FRONTEND_URL}/pendente`
+      },
+    
       external_reference: user._id.toString()
     }
+
 
     console.log("📤 Payload Mercado Pago:", payload)
 
