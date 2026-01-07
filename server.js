@@ -182,9 +182,8 @@ app.post("/assinatura", checkToken, async (req, res) => {
 
     const payload = {
       reason: 'Assinatura Mensal - Plataforma QuimITA',
-      payer: {
-        email: user.email
-      },
+      payer_email: user.email,
+
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
