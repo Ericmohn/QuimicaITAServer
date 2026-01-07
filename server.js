@@ -181,27 +181,20 @@ app.post("/assinatura", checkToken, async (req, res) => {
     console.log("📧 Email:", user.email)
 
     const payload = {
-      reason: "Assinatura Mensal - Plataforma QuimITA",
-    
+      reason: 'Assinatura Mensal - Plataforma QuimITA',
       payer: {
-        email: user.email
+        email: 'TESTUSER7517240798415097831@teste.com'
       },
-    
       auto_recurring: {
         frequency: 1,
-        frequency_type: "months",
+        frequency_type: 'months',
         transaction_amount: 10,
-        currency_id: "BRL"
+        currency_id: 'BRL'
       },
-    
-      back_urls: {
-        success: `${process.env.FRONTEND_URL}/sucesso`,
-        failure: `${process.env.FRONTEND_URL}/erro`,
-        pending: `${process.env.FRONTEND_URL}/pendente`
-      },
-    
-      external_reference: user._id.toString()
+      back_url: 'https://quimicavestibular.com.br/sucesso',
+      external_reference: '695eb2a08a6272787bb06c00'
     }
+
 
 
     console.log("📤 Payload Mercado Pago:", payload)
