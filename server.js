@@ -205,9 +205,11 @@ app.post("/assinatura", checkToken, async (req, res) => {
     console.log("✅ Mercado Pago resposta:", response)
 
     user.assinaturaId = response.id
-    user.assinaturaStatus = response.status
+    user.assinaturaStatus = response.status // pending
+    user.assinatura = false
     user.assinaturaCriadaEm = new Date()
     await user.save()
+
 
     res.json({ init_point: response.init_point })
   } catch (err) {
@@ -233,7 +235,8 @@ app.post("/webhook/mercadopago", async (req, res) => {
       if (!user) return res.sendStatus(200)
 
       user.assinaturaStatus = subscription.status
-      user.assinatura = subscription.status === "authorized"
+      user.assinatura = subscription.status === "active"
+
 
       await user.save()
     }
@@ -245,6 +248,18 @@ app.post("/webhook/mercadopago", async (req, res) => {
   }
 })
 
+// =======================
+// verifica assinatura
+// =======================
+app.post("/user/verifica-assinatura", checkToken, async (req, res) => {
+  const user = await User.findById(req.user.id)
+
+  const ativa =
+    user.assinatura === true &&
+    user.assinaturaStatus === "active"
+
+  res.json({ assinatura: ativa })
+})
 
 // =======================
 // START (RENDER)
