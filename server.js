@@ -187,7 +187,7 @@ app.post("/assinatura", checkToken, async (req, res) => {
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
-        transaction_amount: 10,
+        transaction_amount: 40,
         currency_id: 'BRL'
       },
       back_url: 'https://quimicavestibular.com.br/sucesso',
