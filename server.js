@@ -192,7 +192,7 @@ app.post("/assinatura", checkToken, async (req, res) => {
         currency_id: 'BRL'
       },
       back_url: 'https://quimicavestibular.com.br/sucesso',
-      external_reference: '695eb2a08a6272787bb06c00'
+      external_reference: '3095872078'
     }
 
 
