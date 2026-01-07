@@ -220,9 +220,31 @@ app.post("/assinatura", checkToken, async (req, res) => {
 // WEBHOOK
 // =======================
 app.post("/webhook/mercadopago", async (req, res) => {
-  console.log("📩 Webhook recebido:", req.body)
-  res.sendStatus(200)
+  try {
+    const { type, data } = req.body
+
+    if (type === "preapproval.updated") {
+      const subscription = data
+
+      const user = await User.findOne({
+        assinaturaId: subscription.id
+      })
+
+      if (!user) return res.sendStatus(200)
+
+      user.assinaturaStatus = subscription.status
+      user.assinatura = subscription.status === "authorized"
+
+      await user.save()
+    }
+
+    res.sendStatus(200)
+  } catch (err) {
+    console.error("Erro webhook:", err)
+    res.sendStatus(500)
+  }
 })
+
 
 // =======================
 // START (RENDER)
