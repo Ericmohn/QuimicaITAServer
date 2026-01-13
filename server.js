@@ -58,7 +58,9 @@ const preApproval = new PreApproval(mpClient)
 // EMAIL (RECUPERAÇÃO DE SENHA)
 // =======================
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  service: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
@@ -271,9 +273,14 @@ app.post("/auth/forgot-password", async (req, res) => {
     const link = `${process.env.FRONTEND_URL}/resetar-senha/${token}`
 
     await transporter.sendMail({
+      from: '"QuimITA" <no-reply@quimicavestibular.com.br>',
       to: user.email,
       subject: "Recuperação de senha - QuimITA",
-      html: `<p>Clique no link para redefinir sua senha:</p><a href="${link}">${link}</a>`
+      html: `
+        <p>Você solicitou a recuperação de senha.</p>
+        <p>Clique no link abaixo:</p>
+        <a href="${link}">${link}</a>
+      `
     })
 
     res.json({ ok: true })
