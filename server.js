@@ -264,8 +264,9 @@ app.post("/auth/forgot-password", async (req, res) => {
       {
         sender: {
           name: "QuimITA",
-          email: "no-reply@quimicavestibular.com.br"
-        },
+          email: "no-reply@brevosend.com"
+        }
+        ,
         to: [{ email: user.email }],
         subject: "Recuperação de senha - QuimITA",
         htmlContent: `
