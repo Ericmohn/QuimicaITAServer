@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
 const UserSchema = mongoose.Schema({
   nome: String,
@@ -14,27 +14,39 @@ const UserSchema = mongoose.Schema({
   cidade: String,
   estado: String,
 
-  // Controle de assinatura
+  // =========================
+  // CONTROLE DE ASSINATURA
+  // =========================
   assinatura: {
     type: Boolean,
     default: false,
   },
 
-  // Mercado Pago
   assinaturaId: {
     type: String, // preapproval_id
   },
 
   assinaturaStatus: {
-    type: String, // authorized | cancelled | paused
+    type: String,
     default: "inactive",
   },
 
   assinaturaCriadaEm: {
     type: Date,
   },
-});
 
-const User = mongoose.model("User", UserSchema);
+  // =========================
+  // RECUPERAÇÃO DE SENHA
+  // =========================
+  resetPasswordToken: {
+    type: String,
+  },
 
-module.exports = User;
+  resetPasswordExpires: {
+    type: Date,
+  },
+})
+
+const User = mongoose.model("User", UserSchema)
+
+module.exports = User
