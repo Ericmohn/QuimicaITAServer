@@ -58,7 +58,7 @@ const preApproval = new PreApproval(mpClient)
 // EMAIL (RECUPERAÇÃO DE SENHA)
 // =======================
 const transporter = nodemailer.createTransport({
-  service: "smtp-relay.brevo.com",
+  host: "smtp-relay.brevo.com",
   port: 587,
   secure: false,
   auth: {
