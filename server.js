@@ -4,6 +4,8 @@ const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const cors = require("cors")
+const crypto = require("crypto")
+const nodemailer = require("nodemailer")
 
 const User = require("./models/User")
 const { MercadoPagoConfig, PreApproval } = require("mercadopago")
@@ -11,30 +13,29 @@ const { MercadoPagoConfig, PreApproval } = require("mercadopago")
 const app = express()
 
 // =======================
-// 🔍 LOGS DE START (CRÍTICO)
+// 🔍 LOGS DE START
 // =======================
 console.log("🚀 Server.js iniciado")
 console.log("NODE_ENV:", process.env.NODE_ENV)
 console.log("PORT:", process.env.PORT)
 console.log("FRONTEND_URL:", process.env.FRONTEND_URL)
 console.log("MONGO_URI existe?", !!process.env.MONGO_URI)
-console.log(
-  "MP TOKEN existe?",
-  !!process.env.MERCADOPAGO_ACCESS_TOKEN
-)
+console.log("MP TOKEN existe?", !!process.env.MERCADOPAGO_ACCESS_TOKEN)
 
 // =======================
 // CORS
 // =======================
-app.use(cors({
-  origin: [
-    "https://quimicavestibular.com.br",
-    "https://www.quimicavestibular.com.br"
-  ],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}))
+app.use(
+  cors({
+    origin: [
+      "https://quimicavestibular.com.br",
+      "https://www.quimicavestibular.com.br"
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  })
+)
 
 app.use(express.json())
 
@@ -42,7 +43,6 @@ app.use(express.json())
 // HEALTH CHECK
 // =======================
 app.get("/api/health", (req, res) => {
-  console.log("🩺 Health check chamado")
   res.json({ status: "ok" })
 })
 
@@ -52,14 +52,17 @@ app.get("/api/health", (req, res) => {
 const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN
 })
-
 const preApproval = new PreApproval(mpClient)
 
 // =======================
-// ROOT
+// EMAIL (RECUPERAÇÃO DE SENHA)
 // =======================
-app.get("/", (req, res) => {
-  res.json({ status: "API online 🚀" })
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
 })
 
 // =======================
@@ -68,27 +71,23 @@ app.get("/", (req, res) => {
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB conectado"))
-  .catch(err => {
-    console.error("❌ Erro MongoDB:", err)
-  })
+  .catch(err => console.error("❌ Erro MongoDB:", err))
 
 // =======================
-// JWT
+// JWT MIDDLEWARE
 // =======================
 const checkToken = (req, res, next) => {
   const authHeader = req.headers.authorization
   const token = authHeader?.split(" ")[1]
 
   if (!token) {
-    console.log("❌ Token ausente")
     return res.status(401).json({ msg: "Token ausente" })
   }
 
   try {
     req.user = jwt.verify(token, process.env.SECRET)
     next()
-  } catch (err) {
-    console.log("❌ Token inválido")
+  } catch {
     res.status(401).json({ msg: "Token inválido" })
   }
 }
@@ -98,13 +97,9 @@ const checkToken = (req, res, next) => {
 // =======================
 app.post("/auth/register", async (req, res) => {
   try {
-    console.log("📥 REGISTER chamado:", req.body.email)
-
     const { nome, email, senha, telefone } = req.body
 
-    const exists = await User.findOne({ email })
-    if (exists) {
-      console.log("⚠️ Email já cadastrado:", email)
+    if (await User.findOne({ email })) {
       return res.status(409).json({ msg: "Email já cadastrado" })
     }
 
@@ -115,10 +110,9 @@ app.post("/auth/register", async (req, res) => {
       email,
       senha: hash,
       telefone,
-      assinatura: false
+      assinatura: false,
+      assinaturaStatus: "inactive"
     })
-
-    console.log("✅ Usuário criado:", user._id)
 
     const token = jwt.sign({ id: user._id }, process.env.SECRET, {
       expiresIn: "1d"
@@ -136,19 +130,15 @@ app.post("/auth/register", async (req, res) => {
 // =======================
 app.post("/auth/login", async (req, res) => {
   try {
-    console.log("📥 LOGIN chamado:", req.body.email)
-
     const { email, senha } = req.body
 
     const user = await User.findOne({ email })
     if (!user) {
-      console.log("❌ Usuário não encontrado")
       return res.status(404).json({ msg: "Usuário não encontrado" })
     }
 
     const ok = await bcrypt.compare(senha, user.senha)
     if (!ok) {
-      console.log("❌ Senha inválida")
       return res.status(401).json({ msg: "Senha inválida" })
     }
 
@@ -164,52 +154,37 @@ app.post("/auth/login", async (req, res) => {
 // PERFIL
 // =======================
 app.get("/user/perfil", checkToken, async (req, res) => {
-  console.log("👤 Perfil solicitado:", req.user.id)
-
   const user = await User.findById(req.user.id).select("-senha")
   res.json(user)
 })
 
 // =======================
-// ASSINATURA (🔥 MAIS IMPORTANTE)
+// ASSINATURA
 // =======================
 app.post("/assinatura", checkToken, async (req, res) => {
   try {
-    console.log("💳 Criar assinatura - usuário:", req.user.id)
-
     const user = await User.findById(req.user.id)
-    console.log("📧 Email:", user.email)
 
     const payload = {
-      reason: 'Assinatura Mensal - Plataforma QuimITA',
+      reason: "Assinatura Mensal - Plataforma QuimITA",
       payer_email: user.email,
-
       auto_recurring: {
         frequency: 1,
-        frequency_type: 'months',
+        frequency_type: "months",
         transaction_amount: 40,
-        currency_id: 'BRL'
+        currency_id: "BRL"
       },
-      back_url: 'https://quimicavestibular.com.br/sucesso',
+      back_url: `${process.env.FRONTEND_URL}/sucesso`,
       external_reference: user._id.toString()
     }
 
-
-
-    console.log("📤 Payload Mercado Pago:", payload)
-
-    const response = await preApproval.create({
-     body: payload
-    })
-
-    console.log("✅ Mercado Pago resposta:", response)
+    const response = await preApproval.create({ body: payload })
 
     user.assinaturaId = response.id
-    user.assinaturaStatus = response.status // pending
+    user.assinaturaStatus = response.status
     user.assinatura = false
     user.assinaturaCriadaEm = new Date()
     await user.save()
-
 
     res.json({ init_point: response.init_point })
   } catch (err) {
@@ -219,53 +194,127 @@ app.post("/assinatura", checkToken, async (req, res) => {
 })
 
 // =======================
-// WEBHOOK
+// WEBHOOK MERCADO PAGO
 // =======================
 app.post("/webhook/mercadopago", async (req, res) => {
   try {
     const { type, data } = req.body
 
     if (type === "preapproval.updated") {
-      const subscription = data
-
-      const user = await User.findOne({
-        assinaturaId: subscription.id
-      })
-
+      const user = await User.findOne({ assinaturaId: data.id })
       if (!user) return res.sendStatus(200)
 
-      user.assinaturaStatus = subscription.status
-      user.assinatura = subscription.status === "active"
-
-
+      user.assinaturaStatus = data.status
+      user.assinatura = data.status === "active"
       await user.save()
     }
 
     res.sendStatus(200)
   } catch (err) {
-    console.error("Erro webhook:", err)
+    console.error("❌ Erro webhook:", err)
     res.sendStatus(500)
   }
 })
 
 // =======================
-// verifica assinatura
+// VERIFICA ASSINATURA
 // =======================
 app.post("/user/verifica-assinatura", checkToken, async (req, res) => {
   const user = await User.findById(req.user.id)
 
   const ativa =
-    user.assinatura === true &&
-    user.assinaturaStatus === "active"
+    user.assinatura === true && user.assinaturaStatus === "active"
 
   res.json({ assinatura: ativa })
 })
 
 // =======================
-// START (RENDER)
+// RESETAR SENHA (LOGADO)
+// =======================
+app.post("/user/reset-senha", checkToken, async (req, res) => {
+  try {
+    const { novaSenha } = req.body
+
+    if (!novaSenha || novaSenha.length < 6) {
+      return res
+        .status(400)
+        .json({ msg: "Senha deve ter no mínimo 6 caracteres" })
+    }
+
+    const hash = await bcrypt.hash(novaSenha, 12)
+
+    await User.findByIdAndUpdate(req.user.id, { senha: hash })
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error("❌ Erro reset-senha:", err)
+    res.status(500).json({ msg: "Erro ao atualizar senha" })
+  }
+})
+
+// =======================
+// ESQUECI MINHA SENHA (EMAIL)
+// =======================
+app.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body
+    const user = await User.findOne({ email })
+
+    if (!user) return res.json({ ok: true })
+
+    const token = crypto.randomBytes(32).toString("hex")
+
+    user.resetPasswordToken = token
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000
+    await user.save()
+
+    const link = `${process.env.FRONTEND_URL}/resetar-senha/${token}`
+
+    await transporter.sendMail({
+      to: user.email,
+      subject: "Recuperação de senha - QuimITA",
+      html: `<p>Clique no link para redefinir sua senha:</p><a href="${link}">${link}</a>`
+    })
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error("❌ Erro forgot-password:", err)
+    res.status(500).json({ msg: "Erro ao enviar email" })
+  }
+})
+
+// =======================
+// RESETAR SENHA (TOKEN)
+// =======================
+app.post("/auth/reset-password/:token", async (req, res) => {
+  try {
+    const { senha } = req.body
+
+    const user = await User.findOne({
+      resetPasswordToken: req.params.token,
+      resetPasswordExpires: { $gt: Date.now() }
+    })
+
+    if (!user) {
+      return res.status(400).json({ msg: "Token inválido ou expirado" })
+    }
+
+    user.senha = await bcrypt.hash(senha, 12)
+    user.resetPasswordToken = undefined
+    user.resetPasswordExpires = undefined
+    await user.save()
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error("❌ Erro reset-password:", err)
+    res.status(500).json({ msg: "Erro ao redefinir senha" })
+  }
+})
+
+// =======================
+// START
 // =======================
 const PORT = process.env.PORT || 3000
-
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", () =>
   console.log(`✅ Servidor rodando na porta ${PORT}`)
-})
+)
