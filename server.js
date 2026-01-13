@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const cors = require("cors")
 const crypto = require("crypto")
-const nodemailer = require("nodemailer")
+const axios = require("axios")
 
 const User = require("./models/User")
 const { MercadoPagoConfig, PreApproval } = require("mercadopago")
@@ -53,19 +53,6 @@ const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN
 })
 const preApproval = new PreApproval(mpClient)
-
-// =======================
-// EMAIL (RECUPERAÇÃO DE SENHA)
-// =======================
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-})
 
 // =======================
 // MONGODB
@@ -272,23 +259,36 @@ app.post("/auth/forgot-password", async (req, res) => {
 
     const link = `${process.env.FRONTEND_URL}/resetar-senha/${token}`
 
-    await transporter.sendMail({
-      from: '"QuimITA" <no-reply@quimicavestibular.com.br>',
-      to: user.email,
-      subject: "Recuperação de senha - QuimITA",
-      html: `
-        <p>Você solicitou a recuperação de senha.</p>
-        <p>Clique no link abaixo:</p>
-        <a href="${link}">${link}</a>
-      `
-    })
+    await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "QuimITA",
+          email: "no-reply@quimicavestibular.com.br"
+        },
+        to: [{ email: user.email }],
+        subject: "Recuperação de senha - QuimITA",
+        htmlContent: `
+          <p>Você solicitou a recuperação de senha.</p>
+          <p>Clique no link abaixo:</p>
+          <a href="${link}">${link}</a>
+        `
+      },
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    )
 
     res.json({ ok: true })
   } catch (err) {
-    console.error("❌ Erro forgot-password:", err)
+    console.error("❌ Erro forgot-password:", err.response?.data || err)
     res.status(500).json({ msg: "Erro ao enviar email" })
   }
 })
+
 
 // =======================
 // RESETAR SENHA (TOKEN)
