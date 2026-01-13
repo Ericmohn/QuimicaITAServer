@@ -264,7 +264,7 @@ app.post("/auth/forgot-password", async (req, res) => {
       {
         sender: {
           name: "QuimITA",
-          email: "no-reply@brevosend.com"
+          email: "no-reply@quimicavestibular.com.br"
         }
         ,
         to: [{ email: user.email }],
