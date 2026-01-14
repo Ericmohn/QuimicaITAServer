@@ -1,54 +1,94 @@
 /* eslint-disable no-undef */
 const mongoose = require("mongoose")
 
-const UserSchema = mongoose.Schema({
-  nome: String,
-  email: String,
-  senha: String,
+const UserSchema = new mongoose.Schema(
+  {
+    // =========================
+    // DADOS BÁSICOS
+    // =========================
+    nome: {
+      type: String,
+      required: true,
+    },
 
-  resetPasswordToken: String,
-  resetPasswordExpires: Date,
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
 
-  cpf: String,
-  telefone: String,
-  endereco: String,
-  complemento: String,
-  cep: String,
-  cidade: String,
-  estado: String,
+    senha: {
+      type: String,
+      required: true,
+    },
 
-  // =========================
-  // CONTROLE DE ASSINATURA
-  // =========================
-  assinatura: {
-    type: Boolean,
-    default: false,
+    // =========================
+    // DADOS PESSOAIS
+    // =========================
+    cpf: String,
+    telefone: String,
+    endereco: String,
+    complemento: String,
+    cep: String,
+    cidade: String,
+    estado: String,
+
+    // =========================
+    // CONTROLE DE ASSINATURA
+    // =========================
+    assinatura: {
+      type: Boolean,
+      default: false,
+    },
+
+    // ID do PreApproval (Mercado Pago)
+    assinaturaId: {
+      type: String,
+      default: null,
+    },
+
+    // inactive | pending | active
+    assinaturaStatus: {
+      type: String,
+      enum: ["inactive", "pending", "active"],
+      default: "inactive",
+    },
+
+    // Bloqueia múltiplas reativações
+    assinaturaEmProcesso: {
+      type: Boolean,
+      default: false,
+    },
+
+    assinaturaCriadaEm: {
+      type: Date,
+      default: null,
+    },
+
+    assinaturaAtualizadaEm: {
+      type: Date,
+      default: null,
+    },
+
+    // =========================
+    // RECUPERAÇÃO DE SENHA
+    // =========================
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
   },
-
-  assinaturaId: {
-    type: String, // preapproval_id
-  },
-
-  assinaturaStatus: {
-    type: String,
-    default: "inactive",
-  },
-
-  assinaturaCriadaEm: {
-    type: Date,
-  },
-
-  // =========================
-  // RECUPERAÇÃO DE SENHA
-  // =========================
-  resetPasswordToken: {
-    type: String,
-  },
-
-  resetPasswordExpires: {
-    type: Date,
-  },
-})
+  {
+    timestamps: true, // createdAt / updatedAt
+  }
+)
 
 const User = mongoose.model("User", UserSchema)
 
