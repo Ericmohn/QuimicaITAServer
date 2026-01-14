@@ -13,17 +13,14 @@ const { MercadoPagoConfig, PreApproval } = require("mercadopago")
 const app = express()
 
 // =======================
-// 🔍 LOGS DE START
+// START LOGS
 // =======================
-console.log("🚀 Server.js iniciado")
+console.log("🚀 Server iniciado")
 console.log("NODE_ENV:", process.env.NODE_ENV)
-console.log("PORT:", process.env.PORT)
 console.log("FRONTEND_URL:", process.env.FRONTEND_URL)
-console.log("MONGO_URI existe?", !!process.env.MONGO_URI)
-console.log("MP TOKEN existe?", !!process.env.MERCADOPAGO_ACCESS_TOKEN)
 
 // =======================
-// CORS
+// MIDDLEWARES
 // =======================
 app.use(
   cors({
@@ -31,8 +28,6 @@ app.use(
       "https://quimicavestibular.com.br",
       "https://www.quimicavestibular.com.br"
     ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
   })
 )
@@ -40,9 +35,9 @@ app.use(
 app.use(express.json())
 
 // =======================
-// HEALTH CHECK
+// HEALTH
 // =======================
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (_, res) => {
   res.json({ status: "ok" })
 })
 
@@ -60,18 +55,14 @@ const preApproval = new PreApproval(mpClient)
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB conectado"))
-  .catch(err => console.error("❌ Erro MongoDB:", err))
+  .catch(err => console.error("❌ MongoDB erro:", err))
 
 // =======================
-// JWT MIDDLEWARE
+// JWT
 // =======================
 const checkToken = (req, res, next) => {
-  const authHeader = req.headers.authorization
-  const token = authHeader?.split(" ")[1]
-
-  if (!token) {
-    return res.status(401).json({ msg: "Token ausente" })
-  }
+  const token = req.headers.authorization?.split(" ")[1]
+  if (!token) return res.status(401).json({ msg: "Token ausente" })
 
   try {
     req.user = jwt.verify(token, process.env.SECRET)
@@ -82,61 +73,45 @@ const checkToken = (req, res, next) => {
 }
 
 // =======================
-// REGISTER
+// AUTH
 // =======================
 app.post("/auth/register", async (req, res) => {
-  try {
-    const { nome, email, senha, telefone } = req.body
+  const { nome, email, senha, telefone } = req.body
 
-    if (await User.findOne({ email })) {
-      return res.status(409).json({ msg: "Email já cadastrado" })
-    }
-
-    const hash = await bcrypt.hash(senha, 12)
-
-    const user = await User.create({
-      nome,
-      email,
-      senha: hash,
-      telefone,
-      assinatura: false,
-      assinaturaStatus: "inactive"
-    })
-
-    const token = jwt.sign({ id: user._id }, process.env.SECRET, {
-      expiresIn: "1d"
-    })
-
-    res.json({ token })
-  } catch (err) {
-    console.error("❌ Erro register:", err)
-    res.status(500).json({ msg: "Erro ao cadastrar usuário" })
+  if (await User.findOne({ email })) {
+    return res.status(409).json({ msg: "Email já cadastrado" })
   }
+
+  const hash = await bcrypt.hash(senha, 12)
+
+  const user = await User.create({
+    nome,
+    email,
+    senha: hash,
+    telefone,
+    assinatura: false,
+    assinaturaStatus: "inactive",
+    assinaturaEmProcesso: false
+  })
+
+  const token = jwt.sign({ id: user._id }, process.env.SECRET, {
+    expiresIn: "1d"
+  })
+
+  res.json({ token })
 })
 
-// =======================
-// LOGIN
-// =======================
 app.post("/auth/login", async (req, res) => {
-  try {
-    const { email, senha } = req.body
+  const { email, senha } = req.body
+  const user = await User.findOne({ email })
 
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(404).json({ msg: "Usuário não encontrado" })
-    }
+  if (!user) return res.status(404).json({ msg: "Usuário não encontrado" })
 
-    const ok = await bcrypt.compare(senha, user.senha)
-    if (!ok) {
-      return res.status(401).json({ msg: "Senha inválida" })
-    }
+  const ok = await bcrypt.compare(senha, user.senha)
+  if (!ok) return res.status(401).json({ msg: "Senha inválida" })
 
-    const token = jwt.sign({ id: user._id }, process.env.SECRET)
-    res.json({ token })
-  } catch (err) {
-    console.error("❌ Erro login:", err)
-    res.status(500).json({ msg: "Erro no login" })
-  }
+  const token = jwt.sign({ id: user._id }, process.env.SECRET)
+  res.json({ token })
 })
 
 // =======================
@@ -148,38 +123,104 @@ app.get("/user/perfil", checkToken, async (req, res) => {
 })
 
 // =======================
-// ASSINATURA
+// ASSINATURA (CRIAR)
 // =======================
 app.post("/assinatura", checkToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id)
+  const user = await User.findById(req.user.id)
 
-    const payload = {
-      reason: "Assinatura Mensal - Plataforma QuimITA",
-      payer_email: user.email,
-      auto_recurring: {
-        frequency: 1,
-        frequency_type: "months",
-        transaction_amount: 40,
-        currency_id: "BRL"
-      },
-      back_url: `${process.env.FRONTEND_URL}/sucesso`,
-      external_reference: user._id.toString()
-    }
-
-    const response = await preApproval.create({ body: payload })
-
-    user.assinaturaId = response.id
-    user.assinaturaStatus = response.status
-    user.assinatura = false
-    user.assinaturaCriadaEm = new Date()
-    await user.save()
-
-    res.json({ init_point: response.init_point })
-  } catch (err) {
-    console.error("❌ Erro Mercado Pago:", err)
-    res.status(500).json({ msg: "Erro ao criar assinatura" })
+  const payload = {
+    reason: "Assinatura Mensal - QuimITA",
+    payer_email: user.email,
+    auto_recurring: {
+      frequency: 1,
+      frequency_type: "months",
+      transaction_amount: 40,
+      currency_id: "BRL"
+    },
+    back_url: `${process.env.FRONTEND_URL}/sucesso`,
+    external_reference: user._id.toString()
   }
+
+  const response = await preApproval.create({ body: payload })
+
+  user.assinaturaId = response.id
+  user.assinaturaStatus = "pending"
+  user.assinaturaEmProcesso = true
+  user.assinatura = false
+  await user.save()
+
+  res.json({ init_point: response.init_point })
+})
+
+// =======================
+// VERIFICAR ASSINATURA
+// =======================
+app.post("/user/verifica-assinatura", checkToken, async (req, res) => {
+  const user = await User.findById(req.user.id)
+
+  res.json({
+    assinatura: user.assinatura === true,
+    status: user.assinaturaStatus
+  })
+})
+
+// =======================
+// CANCELAR ASSINATURA
+// =======================
+app.post("/assinatura/cancelar", checkToken, async (req, res) => {
+  const user = await User.findById(req.user.id)
+
+  if (!user?.assinaturaId) {
+    return res.status(400).json({ msg: "Assinatura não encontrada" })
+  }
+
+  await preApproval.update({
+    id: user.assinaturaId,
+    body: { status: "cancelled" }
+  })
+
+  user.assinatura = false
+  user.assinaturaStatus = "inactive"
+  user.assinaturaEmProcesso = false
+  await user.save()
+
+  res.json({ success: true })
+})
+
+// =======================
+// REATIVAR ASSINATURA
+// =======================
+app.post("/assinatura/reativar", checkToken, async (req, res) => {
+  const user = await User.findById(req.user.id)
+
+  if (user.assinaturaStatus === "pending") {
+    return res.status(400).json({
+      msg: "Pagamento já está em processamento"
+    })
+  }
+
+  const payload = {
+    reason: "Assinatura Mensal - QuimITA",
+    payer_email: user.email,
+    auto_recurring: {
+      frequency: 1,
+      frequency_type: "months",
+      transaction_amount: 40,
+      currency_id: "BRL"
+    },
+    back_url: `${process.env.FRONTEND_URL}/assinatura`,
+    external_reference: user._id.toString()
+  }
+
+  const response = await preApproval.create({ body: payload })
+
+  user.assinaturaId = response.id
+  user.assinaturaStatus = "pending"
+  user.assinaturaEmProcesso = true
+  user.assinatura = false
+  await user.save()
+
+  res.json({ init_point: response.init_point })
 })
 
 // =======================
@@ -193,134 +234,92 @@ app.post("/webhook/mercadopago", async (req, res) => {
       const user = await User.findOne({ assinaturaId: data.id })
       if (!user) return res.sendStatus(200)
 
-      user.assinaturaStatus = data.status
-      user.assinatura = data.status === "active"
+      if (data.status === "authorized") {
+        user.assinatura = true
+        user.assinaturaStatus = "active"
+        user.assinaturaEmProcesso = false
+      }
+
+      if (data.status === "pending") {
+        user.assinaturaStatus = "pending"
+      }
+
+      if (["paused", "cancelled"].includes(data.status)) {
+        user.assinatura = false
+        user.assinaturaStatus = "inactive"
+        user.assinaturaEmProcesso = false
+      }
+
       await user.save()
     }
 
     res.sendStatus(200)
   } catch (err) {
-    console.error("❌ Erro webhook:", err)
+    console.error("❌ Webhook erro:", err)
     res.sendStatus(500)
   }
 })
 
 // =======================
-// VERIFICA ASSINATURA
-// =======================
-app.post("/user/verifica-assinatura", checkToken, async (req, res) => {
-  const user = await User.findById(req.user.id)
-
-  const ativa =
-    user.assinatura === true && user.assinaturaStatus === "active"
-
-  res.json({ assinatura: ativa })
-})
-
-// =======================
-// RESETAR SENHA (LOGADO)
-// =======================
-app.post("/user/reset-senha", checkToken, async (req, res) => {
-  try {
-    const { novaSenha } = req.body
-
-    if (!novaSenha || novaSenha.length < 6) {
-      return res
-        .status(400)
-        .json({ msg: "Senha deve ter no mínimo 6 caracteres" })
-    }
-
-    const hash = await bcrypt.hash(novaSenha, 12)
-
-    await User.findByIdAndUpdate(req.user.id, { senha: hash })
-
-    res.json({ ok: true })
-  } catch (err) {
-    console.error("❌ Erro reset-senha:", err)
-    res.status(500).json({ msg: "Erro ao atualizar senha" })
-  }
-})
-
-// =======================
-// ESQUECI MINHA SENHA (EMAIL)
+// ESQUECI MINHA SENHA
 // =======================
 app.post("/auth/forgot-password", async (req, res) => {
-  try {
-    const { email } = req.body
-    const user = await User.findOne({ email })
+  const { email } = req.body
+  const user = await User.findOne({ email })
+  if (!user) return res.json({ ok: true })
 
-    if (!user) return res.json({ ok: true })
+  const token = crypto.randomBytes(32).toString("hex")
 
-    const token = crypto.randomBytes(32).toString("hex")
+  user.resetPasswordToken = token
+  user.resetPasswordExpires = Date.now() + 3600000
+  await user.save()
 
-    user.resetPasswordToken = token
-    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000
-    await user.save()
+  const link = `${process.env.FRONTEND_URL}/resetar-senha/${token}`
 
-    const link = `${process.env.FRONTEND_URL}/resetar-senha/${token}`
-
-    await axios.post(
-      "https://api.brevo.com/v3/smtp/email",
-      {
-        sender: {
-          name: "QuimITA",
-          email: "no-reply@quimicavestibular.com.br"
-        }
-        ,
-        to: [{ email: user.email }],
-        subject: "Recuperação de senha - QuimITA",
-        htmlContent: `
-          <p>Você solicitou a recuperação de senha.</p>
-          <p>Clique no link abaixo:</p>
-          <a href="${link}">${link}</a>
-        `
-      },
-      {
-        headers: {
-          "api-key": process.env.BREVO_API_KEY,
-          "Content-Type": "application/json"
-        }
+  await axios.post(
+    "https://api.brevo.com/v3/smtp/email",
+    {
+      sender: { name: "QuimITA", email: "no-reply@quimicavestibular.com.br" },
+      to: [{ email: user.email }],
+      subject: "Recuperação de senha",
+      htmlContent: `<p>Clique no link:</p><a href="${link}">${link}</a>`
+    },
+    {
+      headers: {
+        "api-key": process.env.BREVO_API_KEY,
+        "Content-Type": "application/json"
       }
-    )
+    }
+  )
 
-    res.json({ ok: true })
-  } catch (err) {
-    console.error("❌ Erro forgot-password:", err.response?.data || err)
-    res.status(500).json({ msg: "Erro ao enviar email" })
-  }
+  res.json({ ok: true })
 })
 
-
 // =======================
-// RESETAR SENHA (TOKEN)
+// RESETAR SENHA
 // =======================
 app.post("/auth/reset-password/:token", async (req, res) => {
-  try {
-    const { senha } = req.body
+  const { senha } = req.body
 
-    const user = await User.findOne({
-      resetPasswordToken: req.params.token,
-      resetPasswordExpires: { $gt: Date.now() }
-    })
+  const user = await User.findOne({
+    resetPasswordToken: req.params.token,
+    resetPasswordExpires: { $gt: Date.now() }
+  })
 
-    if (!user) {
-      return res.status(400).json({ msg: "Token inválido ou expirado" })
-    }
-
-    user.senha = await bcrypt.hash(senha, 12)
-    user.resetPasswordToken = undefined
-    user.resetPasswordExpires = undefined
-    await user.save()
-
-    res.json({ ok: true })
-  } catch (err) {
-    console.error("❌ Erro reset-password:", err)
-    res.status(500).json({ msg: "Erro ao redefinir senha" })
+  if (!user) {
+    return res.status(400).json({ msg: "Token inválido ou expirado" })
   }
+
+  user.senha = await bcrypt.hash(senha, 12)
+  user.resetPasswordToken = undefined
+  user.resetPasswordExpires = undefined
+  await user.save()
+
+  res.json({ ok: true })
 })
 
 // =======================
-// START
+// START SERVER
 // =======================
 const PORT = process.env.PORT || 3000
 app.listen(PORT, "0.0.0.0", () =>
