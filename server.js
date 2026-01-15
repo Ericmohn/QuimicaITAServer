@@ -327,6 +327,29 @@ app.post("/auth/reset-password/:token", async (req, res) => {
 
   res.json({ ok: true })
 })
+//========================
+//VERIFICAÇÂO DE STATUS
+//========================
+app.get("/user/perfil", checkToken, async (req, res) => {
+  const user = await User.findById(req.user.id).select("-senha")
+
+  if (
+    user.assinaturaStatus === "pending" &&
+    user.assinaturaId
+  ) {
+    const mpData = await preApproval.get({ id: user.assinaturaId })
+
+    if (mpData.status === "authorized") {
+      user.assinatura = true
+      user.assinaturaStatus = "active"
+      user.assinaturaEmProcesso = false
+      await user.save()
+    }
+  }
+
+  res.json(user)
+})
+
 
 // =======================
 // START SERVER
