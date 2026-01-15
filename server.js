@@ -129,7 +129,7 @@ app.post("/assinatura", checkToken, async (req, res) => {
   const user = await User.findById(req.user.id)
 
   const payload = {
-    reason: "Assinatura Mensal - QuimITA",
+    reason: "Assinatura Mensal - QuimicaVestibular",
     payer_email: user.email,
     auto_recurring: {
       frequency: 1,
@@ -138,8 +138,10 @@ app.post("/assinatura", checkToken, async (req, res) => {
       currency_id: "BRL"
     },
     back_url: `${process.env.FRONTEND_URL}/sucesso`,
+    notification_url: `${process.env.API_URL}/webhook/mercadopago`,
     external_reference: user._id.toString()
-  }
+}
+
 
   const response = await preApproval.create({ body: payload })
 
@@ -230,28 +232,36 @@ app.post("/webhook/mercadopago", async (req, res) => {
   try {
     const { type, data } = req.body
 
-    if (type === "preapproval.updated") {
-      const user = await User.findOne({ assinaturaId: data.id })
-      if (!user) return res.sendStatus(200)
-
-      if (data.status === "authorized") {
-        user.assinatura = true
-        user.assinaturaStatus = "active"
-        user.assinaturaEmProcesso = false
-      }
-
-      if (data.status === "pending") {
-        user.assinaturaStatus = "pending"
-      }
-
-      if (["paused", "cancelled"].includes(data.status)) {
-        user.assinatura = false
-        user.assinaturaStatus = "inactive"
-        user.assinaturaEmProcesso = false
-      }
-
-      await user.save()
+    if (type !== "preapproval.updated") {
+      return res.sendStatus(200)
     }
+
+    // 1️⃣ Buscar assinatura atualizada no MP
+    const preapprovalData = await preApproval.get({ id: data.id })
+
+    // 2️⃣ Encontrar usuário
+    const user = await User.findOne({ assinaturaId: data.id })
+    if (!user) return res.sendStatus(200)
+
+    // 3️⃣ Atualizar status corretamente
+    if (preapprovalData.status === "authorized") {
+      user.assinatura = true
+      user.assinaturaStatus = "active"
+      user.assinaturaEmProcesso = false
+    }
+
+    if (preapprovalData.status === "pending") {
+      user.assinaturaStatus = "pending"
+    }
+
+    if (["paused", "cancelled"].includes(preapprovalData.status)) {
+      user.assinatura = false
+      user.assinaturaStatus = "inactive"
+      user.assinaturaEmProcesso = false
+    }
+
+    user.assinaturaAtualizadaEm = new Date()
+    await user.save()
 
     res.sendStatus(200)
   } catch (err) {
