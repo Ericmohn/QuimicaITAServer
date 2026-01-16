@@ -217,7 +217,7 @@ app.post("/assinatura/reativar", checkToken, async (req, res) => {
   const response = await preApproval.create({ body: payload })
 
   user.assinaturaId = response.id
-  user.assinaturaStatus = "pending"
+  user.assinaturaStatus = "active"
   user.assinaturaEmProcesso = true
   user.assinatura = false
   await user.save()
