@@ -6,6 +6,9 @@ const jwt = require("jsonwebtoken")
 const cors = require("cors")
 const crypto = require("crypto")
 const axios = require("axios")
+const cron = require("cron")
+const https = require("https")
+
 
 const User = require("./models/User")
 const { MercadoPagoConfig, PreApproval } = require("mercadopago")
@@ -349,8 +352,15 @@ app.get("/user/perfil", checkToken, async (req, res) => {
 
   res.json(user)
 })
-
-
+// =======================
+// KEEP RENDER ALIVE
+// =======================
+if (process.env.NODE_ENV === "production") {
+  const job = new cron.CronJob("*/10 * * * *", function () {
+    https.get(`${process.env.API_URL}/api/health`)
+  })
+  job.start()
+}
 // =======================
 // START SERVER
 // =======================
