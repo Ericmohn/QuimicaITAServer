@@ -115,16 +115,28 @@ app.post("/assinatura", checkToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
 
+    // 🔥 BLOQUEIO PARA ADMIN / TESTER
+    if (["admin", "tester"].includes(user.role)) {
+      return res.status(400).json({
+        msg: "Usuário não precisa de assinatura"
+      })
+    }
+
     const response = await preApproval.create({
       body: {
         reason: "Assinatura Mensal",
         payer_email: user.email,
+
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
           transaction_amount: 40,
           currency_id: "BRL"
         },
+
+        // 🔥 IMPORTANTE: GARANTE INÍCIO
+        start_date: new Date().toISOString(),
+
         back_url: `${process.env.FRONTEND_URL}/sucesso`,
         notification_url: `${process.env.API_URL}/webhook/mercadopago`,
         external_reference: user._id.toString()
@@ -134,6 +146,8 @@ app.post("/assinatura", checkToken, async (req, res) => {
     user.assinaturaId = response.id
     user.assinaturaStatus = "pending"
     user.assinatura = false
+    user.assinaturaCriadaEm = new Date()
+
     await user.save()
 
     res.json({ init_point: response.init_point })
