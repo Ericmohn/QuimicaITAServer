@@ -36,6 +36,15 @@ const UserSchema = new mongoose.Schema(
     estado: String,
 
     // =========================
+    // ROLE / PERMISSÃO (🔥 CORRIGIDO)
+    // =========================
+    role: {
+      type: String,
+      enum: ["user", "admin", "tester"],
+      default: "user",
+    },
+
+    // =========================
     // CONTROLE DE ASSINATURA
     // =========================
     assinatura: {
@@ -89,14 +98,6 @@ const UserSchema = new mongoose.Schema(
     timestamps: true, // createdAt / updatedAt
   }
 )
-// =========================
-// ROLE / PERMISSÃO
-// =========================
-role: {
-  type: String,
-  enum: ["user", "admin", "tester"],
-  default: "user"
-},
 
 const User = mongoose.model("User", UserSchema)
 
