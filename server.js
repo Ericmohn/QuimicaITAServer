@@ -4,8 +4,6 @@ const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const cors = require("cors")
-const crypto = require("crypto")
-const axios = require("axios")
 const cron = require("cron")
 const https = require("https")
 
@@ -68,13 +66,13 @@ app.post("/auth/login", async (req, res) => {
 })
 
 // =======================
-// PERFIL (UNIFICADO)
+// PERFIL
 // =======================
 app.get("/user/perfil", checkToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-senha")
 
-    // 🔥 ISENTO (ADMIN / TESTER)
+    // 🔥 ISENTO
     if (["admin", "tester"].includes(user.role)) {
       return res.json({
         ...user.toObject(),
@@ -83,11 +81,10 @@ app.get("/user/perfil", checkToken, async (req, res) => {
       })
     }
 
-    // 🔥 USUÁRIO NORMAL (SINCRONIZA COM MP)
     if (user.assinaturaId) {
       const mpData = await preApproval.get({ id: user.assinaturaId })
 
-      console.log("MP STATUS:", mpData.status)
+      console.log("MP FULL:", JSON.stringify(mpData, null, 2))
 
       if (mpData.status === "authorized") {
         user.assinatura = true
@@ -108,6 +105,7 @@ app.get("/user/perfil", checkToken, async (req, res) => {
     res.status(500).json({ msg: "Erro interno" })
   }
 })
+
 // =======================
 // CRIAR ASSINATURA
 // =======================
@@ -115,10 +113,15 @@ app.post("/assinatura", checkToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
 
-    // 🔥 BLOQUEIO PARA ADMIN / TESTER
+    // 🔥 ISENTOS
     if (["admin", "tester"].includes(user.role)) {
+      return res.status(400).json({ msg: "Usuário não precisa pagar" })
+    }
+
+    // 🔥 EVITA SPAM DE ASSINATURA
+    if (user.assinaturaStatus === "pending") {
       return res.status(400).json({
-        msg: "Usuário não precisa de assinatura"
+        msg: "Pagamento ainda em processamento. Tente novamente mais tarde."
       })
     }
 
@@ -134,7 +137,6 @@ app.post("/assinatura", checkToken, async (req, res) => {
           currency_id: "BRL"
         },
 
-        // 🔥 IMPORTANTE: GARANTE INÍCIO
         start_date: new Date().toISOString(),
 
         back_url: `${process.env.FRONTEND_URL}/sucesso`,
@@ -151,14 +153,15 @@ app.post("/assinatura", checkToken, async (req, res) => {
     await user.save()
 
     res.json({ init_point: response.init_point })
+
   } catch (err) {
-    console.error(err)
+    console.error("Erro MP:", err?.response?.data || err)
     res.status(500).json({ msg: "Erro ao criar assinatura" })
   }
 })
 
 // =======================
-// WEBHOOK 
+// WEBHOOK
 // =======================
 app.post("/webhook/mercadopago", async (req, res) => {
   try {
@@ -170,12 +173,11 @@ app.post("/webhook/mercadopago", async (req, res) => {
 
     if (!user) return res.sendStatus(200)
 
-    // 🔥 IGNORA ISENTOS
     if (["admin", "tester"].includes(user.role)) {
       return res.sendStatus(200)
     }
 
-    console.log("Webhook status:", mpData.status)
+    console.log("Webhook FULL:", JSON.stringify(mpData, null, 2))
 
     if (mpData.status === "authorized") {
       user.assinatura = true
@@ -195,6 +197,7 @@ app.post("/webhook/mercadopago", async (req, res) => {
     await user.save()
 
     res.sendStatus(200)
+
   } catch (err) {
     console.error("Webhook erro:", err)
     res.sendStatus(500)
