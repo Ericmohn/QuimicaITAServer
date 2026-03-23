@@ -158,7 +158,7 @@ app.post("/assinatura", checkToken, async (req, res) => {
 })
 
 // =======================
-// WEBHOOK CORRIGIDO
+// WEBHOOK 
 // =======================
 app.post("/webhook/mercadopago", async (req, res) => {
   try {
@@ -169,6 +169,11 @@ app.post("/webhook/mercadopago", async (req, res) => {
     const user = await User.findOne({ assinaturaId: id })
 
     if (!user) return res.sendStatus(200)
+
+    // 🔥 IGNORA ISENTOS
+    if (["admin", "tester"].includes(user.role)) {
+      return res.sendStatus(200)
+    }
 
     console.log("Webhook status:", mpData.status)
 
@@ -186,6 +191,7 @@ app.post("/webhook/mercadopago", async (req, res) => {
       user.assinaturaStatus = "pending"
     }
 
+    user.assinaturaAtualizadaEm = new Date()
     await user.save()
 
     res.sendStatus(200)
