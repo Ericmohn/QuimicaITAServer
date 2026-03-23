@@ -74,8 +74,20 @@ app.get("/user/perfil", checkToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-senha")
 
+    // 🔥 ISENTO (ADMIN / TESTER)
+    if (["admin", "tester"].includes(user.role)) {
+      return res.json({
+        ...user.toObject(),
+        assinatura: true,
+        assinaturaStatus: "active"
+      })
+    }
+
+    // 🔥 USUÁRIO NORMAL (SINCRONIZA COM MP)
     if (user.assinaturaId) {
       const mpData = await preApproval.get({ id: user.assinaturaId })
+
+      console.log("MP STATUS:", mpData.status)
 
       if (mpData.status === "authorized") {
         user.assinatura = true
@@ -87,6 +99,7 @@ app.get("/user/perfil", checkToken, async (req, res) => {
         user.assinaturaStatus = "pending"
       }
 
+      user.assinaturaAtualizadaEm = new Date()
       await user.save()
     }
 
@@ -95,7 +108,6 @@ app.get("/user/perfil", checkToken, async (req, res) => {
     res.status(500).json({ msg: "Erro interno" })
   }
 })
-
 // =======================
 // CRIAR ASSINATURA
 // =======================
