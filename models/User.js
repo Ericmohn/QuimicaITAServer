@@ -89,6 +89,14 @@ const UserSchema = new mongoose.Schema(
     timestamps: true, // createdAt / updatedAt
   }
 )
+// =========================
+// ROLE / PERMISSÃO
+// =========================
+role: {
+  type: String,
+  enum: ["user", "admin", "tester"],
+  default: "user"
+},
 
 const User = mongoose.model("User", UserSchema)
 
