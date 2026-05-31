@@ -44,7 +44,53 @@ const checkToken = (req, res, next) => {
     res.status(401).json({ msg: "Token inválido" })
   }
 }
+// =======================
+// REGISTRO
+// =======================
+app.post("/auth/register", async (req, res) => {
+  try {
+    const { nome, email, senha, telefone } = req.body
 
+    if (!nome || !email || !senha || !telefone) {
+      return res.status(422).json({
+        msg: "Preencha todos os campos"
+      })
+    }
+
+    const userExists = await User.findOne({ email })
+
+    if (userExists) {
+      return res.status(400).json({
+        msg: "E-mail já cadastrado"
+      })
+    }
+
+    const salt = await bcrypt.genSalt(12)
+    const senhaHash = await bcrypt.hash(senha, salt)
+
+    const user = await User.create({
+      nome,
+      email,
+      senha: senhaHash,
+      telefone
+    })
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.SECRET,
+      { expiresIn: "1d" }
+    )
+
+    res.status(201).json({ token })
+
+  } catch (err) {
+    console.error("Erro cadastro:", err)
+
+    res.status(500).json({
+      msg: "Erro ao criar usuário"
+    })
+  }
+})
 // =======================
 // AUTH
 // =======================
